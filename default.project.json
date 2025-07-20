@@ -19,6 +19,9 @@
         },
         "SprintOnShift": {
           "$path": "src/StarterPlayer/StarterPlayerScripts/SprintOnShift.client.lua"
+        },
+        "PlayerListUI": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/PlayerListUI.client.lua"
         }
       }
     }
