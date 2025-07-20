@@ -1,0 +1,26 @@
+{
+  "name": "MyGame",
+  "tree": {
+    "$className": "DataModel",
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "TagGameManager": {
+        "$path": "src/ServerScriptService/TagGameManager.lua"
+      }
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "TagUIClient": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/TagUIClient.lua"
+        },
+        "SprintOnShift": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/SprintOnShift.lua"
+        }
+      }
+    }
+  }
+}
