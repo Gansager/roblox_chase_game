@@ -1,10 +1,12 @@
 -- Исправленная логика: всегда кто-то квач, работает с игроками в Live
 
+print("[TagGameManager] started via Rojo")
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local currentIt = nil
 local tagStartTime = nil
-local loseThreshold = 600
+local loseThreshold = 100
 
 local uiUpdateEvent = ReplicatedStorage:FindFirstChild("UpdateTagUI") or Instance.new("RemoteEvent")
 uiUpdateEvent.Name = "UpdateTagUI"

@@ -1,12 +1,12 @@
 {
-  "name": "MyGame",
+  "name": "Chase Game",
   "tree": {
     "$className": "DataModel",
 
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "TagGameManager": {
-        "$path": "src/ServerScriptService/TagGameManager.lua"
+        "$path": "src/ServerScriptService/TagGameManager.server.lua"
       }
     },
 
@@ -15,10 +15,10 @@
       "StarterPlayerScripts": {
         "$className": "StarterPlayerScripts",
         "TagUIClient": {
-          "$path": "src/StarterPlayer/StarterPlayerScripts/TagUIClient.lua"
+          "$path": "src/StarterPlayer/StarterPlayerScripts/TagUIClient.client.lua"
         },
         "SprintOnShift": {
-          "$path": "src/StarterPlayer/StarterPlayerScripts/SprintOnShift.lua"
+          "$path": "src/StarterPlayer/StarterPlayerScripts/SprintOnShift.client.lua"
         }
       }
     }
