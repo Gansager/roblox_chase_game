@@ -12,6 +12,8 @@ uiUpdateEvent.Name = "UpdateTagUI"
 uiUpdateEvent.Parent = ReplicatedStorage
 
 local recentTagged = {}
+local scores = {} -- общий счёт игроков
+
 
 -- Красим персонажа
 local function colorCharacter(char, color)
@@ -26,31 +28,64 @@ end
 
 -- Назначаем нового "квача"
 local function assignRandomIt()
-	local all = Players:GetPlayers()
-	if #all > 0 then
-		local chosen = all[math.random(1, #all)]
-		if chosen.Character then
-			currentIt = chosen
-			tagStartTime = os.time()
-			colorCharacter(chosen.Character, "Bright red")
-			uiUpdateEvent:FireClient(chosen, "Start")
-			uiUpdateEvent:FireAllClients("TagName", chosen.Name)
-			print("[Auto] Назначен новый квач: " .. chosen.Name)
-		end
-	end
+    local all = Players:GetPlayers()
+    local valid = {}
+    for _, pl in ipairs(all) do
+        if pl.Character and pl.Character:FindFirstChild("Humanoid") and pl.Character.Humanoid.Health > 0 then
+            table.insert(valid, pl)
+        end
+    end
+
+    if #valid > 0 then
+        local chosen = valid[math.random(1, #valid)]
+        currentIt = chosen
+        tagStartTime = os.time()
+        colorCharacter(chosen.Character, "Bright red")
+        uiUpdateEvent:FireClient(chosen, "Start")
+        uiUpdateEvent:FireAllClients("TagName", chosen.Name)
+        print("[Auto] Назначен новый квач: " .. chosen.Name)
+    else
+        currentIt = nil
+    end
 end
 
 -- Логика проигрыша
 local function handleLose(player)
-	if player and player.Character then
-		print(player.Name .. " проиграл: был квачом больше " .. loseThreshold .. " секунд")
-		-- Отправляем событие всем, чтобы обновить счетчик проигравшего
-		uiUpdateEvent:FireAllClients("Lose", player.Name)
-		player.Character:BreakJoints()
-		tagStartTime = nil
-		assignRandomIt()
-	end
+    if not player then return end
+
+    -- 1) Обновляем общий серверный счёт
+    scores[player.Name] = (scores[player.Name] or 0) + 1
+    print(player.Name .. " проиграл и получил очко, итого: " .. scores[player.Name])
+
+    -- 2) UI‑таймер/надпись только тому, кто проиграл
+    uiUpdateEvent:FireClient(player, "Lose", player.Name)
+    -- 3) Обновление общего листа очков у всех клиентов
+    uiUpdateEvent:FireAllClients("LoseCount", player.Name)
+
+    -- 4) Сброс текущего квача и «смерть» персонажа
+    currentIt = nil
+    if player.Character then
+        player.Character:BreakJoints()
+    end
+
+    -- 5) Респаун + повторное назначение квача
+    task.spawn(function()
+        -- респаун
+        player:LoadCharacter()
+        player.CharacterAdded:Wait()
+        task.wait(0.5)
+
+        -- назначаем квачом снова
+        currentIt = player
+        tagStartTime = os.time()
+        colorCharacter(player.Character, "Bright red")
+        uiUpdateEvent:FireClient(player, "Start")
+        uiUpdateEvent:FireAllClients("TagName", player.Name)
+        print("[Auto] Снова назначен квач: " .. player.Name)
+    end)
 end
+
+
 
 -- Цикл проверки
 spawn(function()

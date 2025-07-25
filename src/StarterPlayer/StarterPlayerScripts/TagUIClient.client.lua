@@ -41,6 +41,7 @@ uiEvent.OnClientEvent:Connect(function(action, value)
 		screenGui.Enabled = true
 		label.Text = "Quick! Tag another player!"
 	elseif action == "Update" then
+		screenGui.Enabled = true
 		label.Text = "Quick! Tag another player! Time left: " .. math.max(0, math.floor(value)) .. "s"
 	elseif action == "Stop" then
 		screenGui.Enabled = false
