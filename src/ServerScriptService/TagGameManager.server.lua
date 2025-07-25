@@ -4,9 +4,18 @@ local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local currentIt, tagStartTime
-local loseThreshold = 10   -- секунд до проигрыша
+--[[
+    Lose threshold in seconds before "it" loses the game.
+    Set to 10 seconds for a faster-paced, more challenging game.
+    Change this value to adjust game difficulty as needed.
+]]
+local loseThreshold = 10
 local recentTagged  = {}
 local scores        = {}   -- общий счёт игроков
+
+-- Queue for pending respawn/assignment operations
+local respawnQueue = {}
+local isProcessingQueue = false
 
 -- RemoteEvent
 local uiUpdateEvent = ReplicatedStorage:FindFirstChild("UpdateTagUI")
@@ -54,6 +63,28 @@ local function assignRandomIt()
 end
 
 -- Логика проигрыша
+local function processRespawnQueue()
+    if isProcessingQueue then return end
+    isProcessingQueue = true
+    while #respawnQueue > 0 do
+        local plr = table.remove(respawnQueue, 1)
+        if plr and plr.Parent then
+            plr:LoadCharacter()
+            plr.CharacterAdded:Wait()
+            task.wait(0.5)
+
+            currentIt, tagStartTime = plr, os.time()
+            colorCharacter(plr.Character, "Bright red")
+            -- поп‑ап Start только к прежнему квачу
+            uiUpdateEvent:FireClient(plr, "Start")
+            -- всем: имя квача
+            uiUpdateEvent:FireAllClients("TagName", plr.Name)
+            print("[Auto] Снова назначен квач: " .. plr.Name)
+        end
+    end
+    isProcessingQueue = false
+end
+
 local function handleLose(plr)
     if not plr then return end
 
@@ -70,20 +101,9 @@ local function handleLose(plr)
     currentIt = nil
     if plr.Character then plr.Character:BreakJoints() end
 
-    -- респаун + снова квачом
-    task.spawn(function()
-        plr:LoadCharacter()
-        plr.CharacterAdded:Wait()
-        task.wait(0.5)
-
-        currentIt, tagStartTime = plr, os.time()
-        colorCharacter(plr.Character, "Bright red")
-        -- поп‑ап Start только к прежнему квачу
-        uiUpdateEvent:FireClient(plr, "Start")
-        -- всем: имя квача
-        uiUpdateEvent:FireAllClients("TagName", plr.Name)
-        print("[Auto] Снова назначен квач: " .. plr.Name)
-    end)
+    -- Добавляем в очередь респауна
+    table.insert(respawnQueue, plr)
+    task.spawn(processRespawnQueue)
 end
 
 -- Основной цикл: таймер и проверка проигрыша

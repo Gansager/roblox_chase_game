@@ -39,10 +39,17 @@ ContextActionService:BindAction("Sprint", SprintAction, false,
 
 -- На‑экранная кнопка для мобильных
 if UserInputService.TouchEnabled then
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name         = "SprintGUI"
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent       = player:WaitForChild("PlayerGui")
+    local function createSprintGui()
+        -- Remove existing SprintGUI if present
+        local existing = player.PlayerGui:FindFirstChild("SprintGUI")
+        if existing then
+            existing:Destroy()
+        end
+
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name         = "SprintGUI"
+        screenGui.ResetOnSpawn = false
+        screenGui.Parent       = player:WaitForChild("PlayerGui")
 
     local sprintBtn = Instance.new("TextButton")
     sprintBtn.Name               = "SprintBtn"
@@ -56,13 +63,16 @@ if UserInputService.TouchEnabled then
     sprintBtn.Parent             = screenGui
 
     -- скругление и паддинги
-    local corner = Instance.new("UICorner", sprintBtn)
+    local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 12)
-    local padding = Instance.new("UIPadding", sprintBtn)
+    corner.Parent = sprintBtn
+
+    local padding = Instance.new("UIPadding")
     padding.PaddingLeft   = UDim.new(0, 12)
     padding.PaddingRight  = UDim.new(0, 12)
     padding.PaddingTop    = UDim.new(0, 6)
     padding.PaddingBottom = UDim.new(0, 6)
+    padding.Parent = sprintBtn
 
     -- когда палец касается кнопки
     sprintBtn.InputBegan:Connect(function(input)
@@ -76,5 +86,13 @@ if UserInputService.TouchEnabled then
         if input.UserInputType == Enum.UserInputType.Touch then
             if humanoid then humanoid.WalkSpeed = normalSpeed end
         end
+    end)
+    end
+
+    -- Create on script start
+    createSprintGui()
+    -- Recreate on respawn
+    player.CharacterAdded:Connect(function()
+        createSprintGui()
     end)
 end
