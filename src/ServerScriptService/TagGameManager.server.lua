@@ -1,12 +1,11 @@
--- Исправленная логика: всегда кто-то квач, работает с игроками в Live
-
 print("[TagGameManager] started via Rojo")
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local currentIt = nil
 local tagStartTime = nil
-local loseThreshold = 100
+local loseThreshold = 10 -- время в секундах, после которого игрок проигрывает, если он квач
 
 local uiUpdateEvent = ReplicatedStorage:FindFirstChild("UpdateTagUI") or Instance.new("RemoteEvent")
 uiUpdateEvent.Name = "UpdateTagUI"
@@ -14,6 +13,7 @@ uiUpdateEvent.Parent = ReplicatedStorage
 
 local recentTagged = {}
 
+-- Красим персонажа
 local function colorCharacter(char, color)
 	if char then
 		for _, part in ipairs(char:GetDescendants()) do
@@ -24,6 +24,7 @@ local function colorCharacter(char, color)
 	end
 end
 
+-- Назначаем нового "квача"
 local function assignRandomIt()
 	local all = Players:GetPlayers()
 	if #all > 0 then
@@ -39,16 +40,19 @@ local function assignRandomIt()
 	end
 end
 
+-- Логика проигрыша
 local function handleLose(player)
 	if player and player.Character then
-		print(player.Name .. " проиграл: был квачом больше 10 минут")
-		uiUpdateEvent:FireClient(player, "Lose")
+		print(player.Name .. " проиграл: был квачом больше " .. loseThreshold .. " секунд")
+		-- Отправляем событие всем, чтобы обновить счетчик проигравшего
+		uiUpdateEvent:FireAllClients("Lose", player.Name)
 		player.Character:BreakJoints()
 		tagStartTime = nil
 		assignRandomIt()
 	end
 end
 
+-- Цикл проверки
 spawn(function()
 	while true do
 		task.wait(1)
@@ -65,6 +69,7 @@ spawn(function()
 	end
 end)
 
+-- Назначаем квача при заходе первого игрока
 local function setInitialIt(player)
 	currentIt = player
 	tagStartTime = os.time()
@@ -74,6 +79,7 @@ local function setInitialIt(player)
 	uiUpdateEvent:FireAllClients("TagName", player.Name)
 end
 
+-- Передача "квача"
 local function tryTag(hit)
 	if not currentIt or not currentIt.Character then return end
 
@@ -104,6 +110,7 @@ local function tryTag(hit)
 	end
 end
 
+-- Подключаем touch-обработчик
 local function connectTouch(player)
 	player.CharacterAdded:Connect(function(char)
 		char:WaitForChild("HumanoidRootPart")
@@ -117,6 +124,7 @@ local function connectTouch(player)
 	end)
 end
 
+-- Игрок заходит
 Players.PlayerAdded:Connect(function(player)
 	connectTouch(player)
 	if not currentIt then
