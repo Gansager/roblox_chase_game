@@ -28,6 +28,9 @@ end
 
 -- Назначаем нового "квача"
 local function assignRandomIt()
+	    if currentIt then
+        return  -- уже есть квач, не назначаем второго
+    end
     local all = Players:GetPlayers()
     local valid = {}
     for _, pl in ipairs(all) do
@@ -106,6 +109,9 @@ end)
 
 -- Назначаем квача при заходе первого игрока
 local function setInitialIt(player)
+	    if currentIt then
+        return  -- если кто-то уже квач, не переприсваиваем
+    end
 	currentIt = player
 	tagStartTime = os.time()
 	print(player.Name .. " стал квачом!")
