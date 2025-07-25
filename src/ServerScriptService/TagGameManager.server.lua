@@ -1,12 +1,12 @@
 print("[TagGameManager] started via Rojo")
 
-local Players          = game:GetService("Players")
+local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local currentIt, tagStartTime
 local loseThreshold = 10   -- секунд до проигрыша
-local recentTagged = {}
-local scores       = {}    -- общий счёт игроков
+local recentTagged  = {}
+local scores        = {}   -- общий счёт игроков
 
 -- RemoteEvent
 local uiUpdateEvent = ReplicatedStorage:FindFirstChild("UpdateTagUI")
@@ -26,7 +26,7 @@ local function colorCharacter(char, color)
     end
 end
 
--- Выбор нового «квача», если его ещё нет
+-- Выбираем нового квача (если currentIt == nil)
 local function assignRandomIt()
     if currentIt then return end
 
@@ -42,47 +42,45 @@ local function assignRandomIt()
         return
     end
 
-    local chosen = valid[math.random(1, #valid)]
-    currentIt   = chosen
-    tagStartTime = os.time()
+    local chosen     = valid[math.random(1, #valid)]
+    currentIt, tagStartTime = chosen, os.time()
 
     colorCharacter(chosen.Character, "Bright red")
-    -- только квачу:
-    uiUpdateEvent:FireClient(chosen, "Start")
+    -- поп‑ап: видно только квачу
+    uiUpdateEvent:FireClient(chosen,  "Start")
     -- всем показываем имя квача
     uiUpdateEvent:FireAllClients("TagName", chosen.Name)
     print("[Auto] Назначен новый квач: " .. chosen.Name)
 end
 
--- Когда квачу пора проиграть
+-- Логика проигрыша
 local function handleLose(plr)
     if not plr then return end
 
-    -- инкремент очка на сервере
+    -- обновляем счёт на сервере
     scores[plr.Name] = (scores[plr.Name] or 0) + 1
     print(plr.Name .. " проиграл и получил очко, итого: " .. scores[plr.Name])
 
-    -- только квачу: «You lost!»
+    -- поп‑ап «You lost!» — только квачу
     uiUpdateEvent:FireClient(plr, "Lose")
-    -- всем: обновить счёт проигрышей
+    -- всем: обновить общий лист очков
     uiUpdateEvent:FireAllClients("LoseCount", plr.Name)
 
-    -- убираем текущего квача
+    -- сброс квача и «смерть»
     currentIt = nil
-    if plr.Character then
-        plr.Character:BreakJoints()
-    end
+    if plr.Character then plr.Character:BreakJoints() end
 
-    -- через респаун вернём его же квачом
+    -- респаун + снова квачом
     task.spawn(function()
         plr:LoadCharacter()
         plr.CharacterAdded:Wait()
         task.wait(0.5)
 
-        currentIt   = plr
-        tagStartTime = os.time()
+        currentIt, tagStartTime = plr, os.time()
         colorCharacter(plr.Character, "Bright red")
+        -- поп‑ап Start только к прежнему квачу
         uiUpdateEvent:FireClient(plr, "Start")
+        -- всем: имя квача
         uiUpdateEvent:FireAllClients("TagName", plr.Name)
         print("[Auto] Снова назначен квач: " .. plr.Name)
     end)
@@ -101,8 +99,10 @@ spawn(function()
             local elapsed   = os.time() - tagStartTime
             local remaining = loseThreshold - elapsed
 
-            -- вместо FireClient делаем FireAllClients
-            uiUpdateEvent:FireAllClients("Update", remaining)
+            -- 1) поп‑ап‑таймер только квачу
+            uiUpdateEvent:FireClient(currentIt, "Update", remaining)
+            -- 2) табличный таймер всем
+            uiUpdateEvent:FireAllClients("TimerUpdate", remaining)
 
             if remaining <= 0 then
                 handleLose(currentIt)
@@ -111,16 +111,15 @@ spawn(function()
     end
 end)
 
-
--- Когда игрок первый заходит — можем дать ему квач
+-- Назначение первого квача при заходе
 local function setInitialIt(plr)
     if currentIt then return end
-    currentIt   = plr
-    tagStartTime = os.time()
 
-    print(plr.Name .. " стал квачом!")
+    currentIt, tagStartTime = plr, os.time()
     colorCharacter(plr.Character, "Bright red")
+    -- поп‑ап: только к этим игроку
     uiUpdateEvent:FireClient(plr, "Start")
+    -- всем: имя квача
     uiUpdateEvent:FireAllClients("TagName", plr.Name)
 end
 
@@ -129,8 +128,7 @@ local function tryTag(hit)
     if not currentIt or not currentIt.Character then return end
 
     local targetChar = hit:FindFirstAncestorWhichIsA("Model")
-    if not targetChar or not targetChar:FindFirstChild("Humanoid") then return end
-
+    if not (targetChar and targetChar:FindFirstChild("Humanoid")) then return end
     if targetChar == currentIt.Character then return end
     if recentTagged[targetChar] and tick() - recentTagged[targetChar] < 3 then return end
 
@@ -143,23 +141,21 @@ local function tryTag(hit)
     colorCharacter(targetChar,        "Bright red")
     recentTagged[prev.Character] = tick()
 
-    currentIt   = targetPlr
-    tagStartTime = os.time()
-
-    -- прежнему квачу: Stop
-    uiUpdateEvent:FireClient(prev, "Stop")
-    -- новому квачу: Start
+    currentIt, tagStartTime = targetPlr, os.time()
+    -- поп‑ап Stop только старому квачу
+    uiUpdateEvent:FireClient(prev,      "Stop")
+    -- поп‑ап Start только новому квачу
     uiUpdateEvent:FireClient(targetPlr, "Start")
+    -- всем: имя квача
     uiUpdateEvent:FireAllClients("TagName", targetPlr.Name)
 end
 
--- Навешиваем touch-событие на каждого игрока
+-- Навешиваем touch‑событие на каждого игрока
 local function connectTouch(plr)
     plr.CharacterAdded:Connect(function(char)
         char:WaitForChild("HumanoidRootPart")
         task.wait(0.5)
-        local hrp = char.HumanoidRootPart
-        hrp.Touched:Connect(tryTag)
+        char.HumanoidRootPart.Touched:Connect(tryTag)
     end)
 end
 

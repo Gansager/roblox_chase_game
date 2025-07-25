@@ -24,15 +24,13 @@ frame.BackgroundColor3    = Color3.fromRGB(30, 30, 30)
 frame.BorderSizePixel     = 0
 
 -- Скруглённые углы у фрейма
-local frameCorner = Instance.new("UICorner")
+local frameCorner = Instance.new("UICorner", frame)
 frameCorner.CornerRadius = UDim.new(0, 8)
-frameCorner.Parent       = frame
 
 -- Layout и паддинг
-local uiList = Instance.new("UIListLayout")
+local uiList = Instance.new("UIListLayout", frame)
 uiList.SortOrder = Enum.SortOrder.Name
 uiList.Padding   = UDim.new(0, 4)
-uiList.Parent    = frame
 
 -- Автоматический ресайз фрейма под контент
 uiList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
@@ -58,9 +56,10 @@ local function updatePlayerList()
     -- Создаём новые
     for _, pl in ipairs(Players:GetPlayers()) do
         local count = lostCounts[pl.Name] or 0
+
         -- Добавляем таймер только к квачу
         local timerText = ""
-        if pl.Name == taggerName and remainingTime then
+        if pl.Name == taggerName and remainingTime ~= nil then
             timerText = " – " .. remainingTime .. "s"
         end
 
@@ -78,27 +77,28 @@ local function updatePlayerList()
                                       and Color3.fromRGB(150, 20, 20)
                                       or Color3.fromRGB(220, 220, 220)
 
-        local corner = Instance.new("UICorner")
+        local corner = Instance.new("UICorner", label)
         corner.CornerRadius = UDim.new(0, 6)
-        corner.Parent       = label
     end
 end
 
 -- Обработка событий от сервера
 uiEvent.OnClientEvent:Connect(function(action, payload)
     if action == "NewTagger" or action == "TagName" then
+        -- Новый квач: сброс таймера и обновление списка
         taggerName    = payload
         remainingTime = nil
         updatePlayerList()
 
     elseif action == "LoseCount" then
+        -- Приращение очка в таблице у всех
         if payload then
             lostCounts[payload] = (lostCounts[payload] or 0) + 1
             updatePlayerList()
         end
 
-    elseif action == "Update" then
-        -- payload = оставшееся время в секундах
+    elseif action == "TimerUpdate" then
+        -- Получаем событие табличного таймера
         remainingTime = math.max(0, math.floor(payload))
         updatePlayerList()
     end
