@@ -1,9 +1,9 @@
 -- TagGameManager.server.lua
 -- Логика игры "Доганялка":
 -- 1. Управляет тем, кто является "квачом" (IT).
--- 2. Следит за таймером квача (если не успел догнать – проиграл).
--- 3. Передает роль квача при приближении к другим игрокам (без использования Touched).
--- 4. Синхронизирует UI с клиентами через RemoteEvent.
+-- 2. Следит за таймером квача.
+-- 3. Передает роль квача при приближении к другим игрокам.
+-- 4. Если квач вышел из игры — выбирает нового квача.
 
 print("[TagGameManager] started via Rojo")
 
@@ -22,6 +22,9 @@ local scores = {}
 
 -- Таблица для предотвращения повторной передачи квача слишком быстро
 local recentTagged = {}
+-- Таблица для блокировки возврата роли квача на 3 секунды
+local cantBeTaggedUntil = {}
+local RETURN_TAG_DELAY = 3  -- задержка 3 сек для возврата квача
 
 -- Очередь для респауна проигравших игроков
 local respawnQueue = {}
@@ -39,7 +42,6 @@ end
 -- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 ----------------------------------------------------------------------
 
--- Окрашивание персонажа в указанный цвет
 local function colorCharacter(char, color)
     if not char then return end
     for _, part in ipairs(char:GetDescendants()) do
@@ -49,10 +51,7 @@ local function colorCharacter(char, color)
     end
 end
 
--- Случайный выбор квача, если его нет
 local function assignRandomIt()
-    if currentIt then return end
-
     local valid = {}
     for _, pl in ipairs(Players:GetPlayers()) do
         if pl.Character and pl.Character:FindFirstChild("Humanoid") and pl.Character.Humanoid.Health > 0 then
@@ -61,6 +60,7 @@ local function assignRandomIt()
     end
 
     if #valid == 0 then
+        print("[Auto] Нет игроков для назначения квача.")
         currentIt = nil
         return
     end
@@ -74,7 +74,6 @@ local function assignRandomIt()
     print("[Auto] Назначен новый квач: " .. chosen.Name)
 end
 
--- Респаун проигравших игроков
 local function processRespawnQueue()
     if isProcessingQueue then return end
     isProcessingQueue = true
@@ -97,7 +96,6 @@ local function processRespawnQueue()
     isProcessingQueue = false
 end
 
--- Обработка проигрыша квача (если время вышло)
 local function handleLose(plr)
     if not plr then return end
 
@@ -115,14 +113,13 @@ local function handleLose(plr)
 end
 
 ----------------------------------------------------------------------
--- ПЕРЕДАЧА КВАЧА ПО ДИСТАНЦИИ (без Touched)
+-- ПЕРЕДАЧА КВАЧА ПО ДИСТАНЦИИ
 ----------------------------------------------------------------------
 
-local MAX_TAG_DISTANCE = 3  -- допустимая дистанция для передачи квача
-local CHECK_INTERVAL = 0.1  -- интервал проверки (секунды)
-local TAG_COOLDOWN = 2      -- кулдаун (секунды), чтобы квач не прыгал туда-сюда моментально
+local MAX_TAG_DISTANCE = 3   -- допустимая дистанция
+local CHECK_INTERVAL   = 0.1 -- интервал проверки (секунды)
+local TAG_COOLDOWN     = 2   -- кулдаун передачи (секунды)
 
--- Проверка всех игроков на близость к текущему квачу
 local function checkTagProximity()
     if not currentIt or not currentIt.Character then return end
     local itRoot = currentIt.Character:FindFirstChild("HumanoidRootPart")
@@ -134,13 +131,17 @@ local function checkTagProximity()
             local distance = (itRoot.Position - targetRoot.Position).Magnitude
 
             if distance <= MAX_TAG_DISTANCE then
-                -- Проверяем кулдаун (нельзя слишком часто передавать)
+                -- Проверка кулдауна передачи
                 if recentTagged[pl.Name] and tick() - recentTagged[pl.Name] < TAG_COOLDOWN then
                     continue
                 end
+                -- Проверка на возврат роли квача
+                if cantBeTaggedUntil[pl.Name] and tick() < cantBeTaggedUntil[pl.Name] then
+                    continue
+                end
 
-                -- Передача роли
                 print("Квач передан → " .. pl.Name)
+                cantBeTaggedUntil[currentIt.Name] = tick() + RETURN_TAG_DELAY -- блокируем обратную передачу
                 colorCharacter(currentIt.Character, "Medium stone grey")
                 colorCharacter(pl.Character, "Bright red")
                 recentTagged[pl.Name] = tick()
@@ -151,14 +152,12 @@ local function checkTagProximity()
                 uiUpdateEvent:FireClient(prev, "Stop")
                 uiUpdateEvent:FireClient(pl, "Start")
                 uiUpdateEvent:FireAllClients("TagName", pl.Name)
-
-                return -- выходим после передачи (за раз передаем только одному)
+                return
             end
         end
     end
 end
 
--- Запускаем периодическую проверку расстояния
 task.spawn(function()
     while true do
         task.wait(CHECK_INTERVAL)
@@ -167,13 +166,20 @@ task.spawn(function()
 end)
 
 ----------------------------------------------------------------------
--- ОСНОВНОЙ ЦИКЛ: таймер для квача
+-- ОСНОВНОЙ ЦИКЛ: таймер квача
 ----------------------------------------------------------------------
 spawn(function()
     while true do
         task.wait(1)
 
-        if not currentIt or not currentIt.Character then
+        local playersCount = #Players:GetPlayers()
+
+        if playersCount < 1 then
+            currentIt = nil
+            continue
+        end
+
+        if not currentIt or not currentIt.Parent or not currentIt.Character then
             assignRandomIt()
         end
 
@@ -192,11 +198,10 @@ spawn(function()
 end)
 
 ----------------------------------------------------------------------
--- НАЧАЛО ИГРЫ: выбор первого квача
+-- НАЗНАЧЕНИЕ ПЕРВОГО КВАЧА
 ----------------------------------------------------------------------
 local function setInitialIt(plr)
     if currentIt then return end
-
     currentIt, tagStartTime = plr, os.time()
     colorCharacter(plr.Character, "Bright red")
     uiUpdateEvent:FireClient(plr, "Start")
@@ -204,13 +209,29 @@ local function setInitialIt(plr)
 end
 
 ----------------------------------------------------------------------
--- СОБЫТИЯ ПРИ ВХОДЕ ИГРОКОВ
+-- СОБЫТИЯ ВХОДА/ВЫХОДА ИГРОКОВ
 ----------------------------------------------------------------------
+
 Players.PlayerAdded:Connect(function(plr)
-    plr.CharacterAdded:Connect(function(char)
+    plr.CharacterAdded:Connect(function()
         task.wait(0.5)
         if not currentIt then
             setInitialIt(plr)
         end
     end)
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    if currentIt and currentIt.Name == plr.Name then
+        print("[Auto] Квач " .. plr.Name .. " вышел. Переназначаем...")
+        currentIt = nil
+        
+        task.delay(0.2, function()
+            if #Players:GetPlayers() > 0 then
+                assignRandomIt()
+            else
+                print("[Auto] Нет игроков для нового квача.")
+            end
+        end)
+    end
 end)
